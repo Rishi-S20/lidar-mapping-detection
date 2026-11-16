@@ -33,7 +33,6 @@ MAX_VIEWER_POINTS = 20000  # EchoSense viewer limit
 MAX_DENSE_POINTS = 800000  # viewer.html (WebGL handles this easily)
 VIEWER_HTML = Path(__file__).with_name("viewer.html")
 FRAME_POINTS = 2500  # current frame, drawn on top of the map
-SONAR_STRENGTH = 200.0  # marks sonar-only surface points in the viewer envelope (map <= 50, live frame = 100)
 
 
 def write_record(fh, message: bytes) -> None:
@@ -87,8 +86,6 @@ class LiveMapper:
         self.started = time.time()
         self._disp, self._disp_size, self._disp_map = None, 0, None
         self._disp_voxel = 0.05
-        self.sonar = None  # optional SonarFusion (sonar.py)
-        self.sonar_replay: dict | None = None  # seq -> range, when replaying a recording with a sidecar
         self.detector = None  # optional person model (detect.py), set by --person-model
         self.detections: list[dict] = []  # person boxes from the last "Find people"
         self.person_range: dict | None = None  # distance to a detected person for the newest frame
@@ -138,16 +135,9 @@ class LiveMapper:
             pts = backproject(f.depth, f.K, f.confidence, self.mapper.min_conf, max_range=self.mapper.max_range,
                               stride=2)
             self.frame_points = pts @ r.R.T + r.t
-            if self.sonar is not None:
-                if self.sonar_replay is not None:
-                    self.sonar.update(self.sonar_replay.get(f.seq))
-                self.sonar.observe(f.depth, f.K, r.R, r.t, tracking=r.status in ("tracking", "relocalized", "merged", "arkit"),
-                                   seq=f.seq)
             if self.detections:
-                from .sonar import person_range
-                reading = self.sonar.latest()[0] if self.sonar is not None else None
-                cone = (self.sonar.half_angle_deg, self.sonar.offset_deg) if self.sonar is not None else (10.0, (0.0, 0.0))
-                self.person_range = person_range(reading, f.depth, f.K, r.R, r.t, self.detections, *cone)
+                from .detect import person_range
+                self.person_range = person_range(f.depth, f.K, r.R, r.t, self.detections)
             self.last = (f, r)
             self.mapped += 1
             self.last_ingested_at = time.monotonic()
@@ -240,15 +230,6 @@ class LiveMapper:
             meta = {"format_version": "0.2", "source": acquisition, "sensor_id": "iphone-lidar",
                     "tilt_deg": 0.0, "kind": "lidar_map", "view": self.view,
                     "capture": self._capture_status()}
-            if self.sonar is not None:
-                # Sonar-only surfaces go last so they survive the point cap, which trims map points first.
-                extra = [[round(float(x), 3), round(float(y), 3), round(float(z), 3), SONAR_STRENGTH]
-                         for x, y, z in self.sonar.surface]
-                rows = rows[:max(0, MAX_VIEWER_POINTS - len(extra))] + extra
-                meta["sonar"] = dict(self.sonar.status)
-                # Legacy sonar sidecars contain only seq/range, not original provenance.
-                meta["sonar"]["acquisition_source"] = ("simulated" if self.sonar.synthetic else
-                                                         "recorded" if self.delivery == "recorded" else "live")
             t = float(self.last[0].t) if self.last else 0.0
         self.seq += 1
         return json.dumps({
@@ -294,7 +275,7 @@ class LiveMapper:
                    "status": r.status if r else "waiting", "voxels": len(m.map),
                    "valid": f.valid_fraction if f else None,
                    "pose": [float(x) for x in r.t] if r else None, "segments": len(m.segments),
-                   "person_range": self.person_range, "sonar": self.sonar is not None}
+                   "person_range": self.person_range}
         hb = json.dumps(hdr).encode()
         pad = (4 - (4 + len(hb)) % 4) % 4
         return (struct.pack("<I", len(hb)) + hb + b"\0" * pad + mp.tobytes() + fp.tobytes() + tr.tobytes())
@@ -350,15 +331,7 @@ class LiveMapper:
         return (f"[map] rx {self.rx} mapped {self.mapped} dropped {self.dropped} | {r.status:8s} "
                 f"pos ({r.t[0]:+.2f},{r.t[1]:+.2f},{r.t[2]:+.2f}) m | valid depth {f.valid_fraction:.0%} | "
                 f"rmse {r.rmse * 100:.1f} cm | grav err {r.gravity_err_deg:.1f} deg | {lux} | "
-                f"map {len(self.mapper.map)} voxels" + self._sonar_text())
-
-    def _sonar_text(self) -> str:
-        if self.sonar is None:
-            return ""
-        s = self.sonar.status
-        reading = "no reading" if s.get("range_m") is None else f"{s['range_m']:.2f} m"
-        lidar = "" if s.get("lidar_near_m") is None else f" vs lidar {s['lidar_near_m']:.2f} m"
-        return f" | sonar {reading}{lidar} {s['state']} ({len(self.sonar.surface)} sonar-only pts)"
+                f"map {len(self.mapper.map)} voxels")
 
     async def status(self, every: float = 1.0) -> None:
         while True:
@@ -448,12 +421,6 @@ class LiveMapper:
                 self.record_fh = open(new, "ab")
                 self.current_path = new
                 note += f"; now recording to {new}"
-            if self.sonar is not None:
-                # Sonar-only surfaces belong to the map that was just wiped; readings follow the new file.
-                self.sonar.surface, self.sonar._cells, self.sonar._streak = [], set(), []
-                if self.sonar.sidecar is not None and self.record_path:
-                    self.sonar.sidecar.close()
-                    self.sonar.sidecar = open(str(self.current_path) + ".sonar.jsonl", "a", encoding="utf-8")
         print(f"[map] {note}", flush=True)
         return note
 
@@ -463,8 +430,6 @@ class LiveMapper:
         finally:
             if self.record_fh:
                 self.record_fh.close()
-            if self.sonar is not None and self.sonar.sidecar is not None:
-                self.sonar.sidecar.close()
 
 
 def dense_server(live: LiveMapper, port: int = 8780):

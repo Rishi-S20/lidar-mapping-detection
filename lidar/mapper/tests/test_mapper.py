@@ -190,38 +190,3 @@ def test_labels_saved_live_and_exported(tmp_path):
     assert fr["pose_status"].count("tracking") >= 15
     mp = pq.read_table(res.map_path).to_pydict()
     assert len(mp["x"]) == len(np.load(rec.with_suffix(".live.npz"))["map_points"])
-
-
-def test_synthetic_scan_from_an_empty_room(tmp_path):
-    import json
-
-    from lidar_mapper.export import export_session
-    from lidar_mapper.server import LiveMapper, write_record
-    from lidar_mapper.synth import ray_prim, Capsule, synthesize
-
-    # ray-capsule sanity: straight down onto a horizontal capsule of radius 0.1 at z = 0
-    d = ray_prim(np.array([0.0, 0, 1]), np.array([[0.0, 0, -1]]), Capsule(np.array([-1.0, 0, 0]), np.array([1.0, 0, 0]), 0.1))
-    assert abs(d[0] - 0.9) < 1e-9
-
-    rec = tmp_path / "empty.esd"  # a simulated *empty* room (no lump on the floor) stands in for a real one
-    live = LiveMapper(Mapper(), record=str(rec), verbose=False)
-    for f in stream(40, boxes=default_room()[:-1]):
-        msg = protocol.encode(f)
-        write_record(live.record_fh, msg)
-        live.ingest(msg)
-    live.set_labels({"lights": "off", "room": "sim", "scene": "empty_room"}, [])
-    live.close()
-
-    r = synthesize(rec, "pet", "cat", tmp_path / "synth", "synth-pet-01", seed=0)
-    lab = json.loads((tmp_path / "synth" / "synth-pet-01.labels.json").read_text())
-    assert lab["scene"]["data_origin"] == "synthetic" and lab["scene"]["base_scan"] == "empty.esd"
-    assert lab["scene"]["lights"] == "off" and lab["scene"]["scene"] == "pet"
-    (box,) = lab["boxes"]
-    assert box["label"] == "pet" and r["visible_target_points"][0] > 100
-    lo, hi = np.array(box["min"]), np.array(box["max"])
-    assert 0.15 < hi[2] - lo[2] < 0.7  # a cat, not the room
-    mp = np.load(tmp_path / "synth" / "synth-pet-01.live.npz")["map_points"]
-    assert ((mp >= lo).all(1) & (mp <= hi).all(1)).sum() > 50  # the cat is in the map, inside its box
-    res = export_session(tmp_path / "synth" / "synth-pet-01.esd", tmp_path / "out")
-    meta = json.loads(res.session_path.read_text())
-    assert meta["map_source"] == "live" and meta["labels"]["data_origin"] == "synthetic"

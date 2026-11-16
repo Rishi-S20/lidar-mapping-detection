@@ -41,16 +41,14 @@ def _wall_frame(person_at=None, blocker_at=None):
     return depth, K
 
 
-def test_sonar_reading_is_the_person_distance_only_when_the_person_is_nearest_in_the_cone():
-    from lidar_mapper.sonar import person_range
+def test_distance_to_a_person_only_when_they_are_the_nearest_thing_ahead():
+    from lidar_mapper.detect import person_range
     R, t = np.eye(3), np.zeros(3)
     box = [{"min": [-0.3, -0.5, 1.6], "max": [0.3, 0.6, 2.0]}]
     depth, K = _wall_frame(person_at=1.8)
-    hit = person_range(1.76, depth, K, R, t, box)
-    assert hit["state"] == "person" and hit["source"] == "sonar" and hit["range_m"] == 1.76
-    assert abs(hit["lidar_person_m"] - 1.8) < 0.05
-    assert person_range(None, depth, K, R, t, box)["source"] == "lidar"          # no echo: fall back to LiDAR
+    hit = person_range(depth, K, R, t, box)
+    assert hit["state"] == "person" and abs(hit["range_m"] - 1.8) < 0.05
     blocked, _ = _wall_frame(person_at=1.8, blocker_at=0.9)
-    assert person_range(0.9, blocked, K, R, t, box)["state"] == "ambiguous"       # something nearer in the beam
+    assert person_range(blocked, K, R, t, box)["state"] == "ambiguous"        # something nearer is in the way
     away = [{"min": [2.0, -0.5, 1.6], "max": [2.6, 0.6, 2.0]}]
-    assert person_range(1.76, depth, K, R, t, away)["state"] == "no_person"       # not aimed at the box
+    assert person_range(depth, K, R, t, away)["state"] == "no_person"         # not aimed at the box

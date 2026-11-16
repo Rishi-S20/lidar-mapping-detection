@@ -2,7 +2,7 @@
 
 Goal: scans where people, pets and objects are boxed and labelled, so the next
 stage (embeddings → classifier) has training data. Labels are drawn in the live
-viewer right after each scan ([ADR-0017](../sonar-ml/docs/decisions/0017-scan-labelling.md)).
+viewer right after each scan ([ADR-0017](docs/decisions/0017-scan-labelling.md)).
 
 ## Setup (once per session)
 
@@ -39,23 +39,6 @@ viewer right after each scan ([ADR-0017](../sonar-ml/docs/decisions/0017-scan-la
 
 For each scene, do about half with the **lights off** (set Lights = off). That's also
 the dark test.
-
-## Synthetic scans for what's missing
-
-Scenes you can't stage (pets, crouching, partly covered, clutter) can be generated from real
-empty-room scans ([ADR-0018](../sonar-ml/docs/decisions/0018-synthetic-lidar-scans.md)). Each
-generated scene uses the real scan's phone path, depth and noise, with a modelled person, pet
-or clutter placed on free floor:
-
-```bash
-cd lidar/mapper
-.venv/bin/python -m lidar_mapper synth recordings/<day>-scanA.esd recordings/<day>-scanB.esd \
-    --out recordings/synthetic                       # the rest of the checklist
-.venv/bin/python -m lidar_mapper synth recordings/<day>-scanA.esd --scene pet --variant cat --seed 7
-```
-
-Every synthetic scan is labelled `data_origin = synthetic`, so it can always be filtered out.
-Evaluate models on real scans only.
 
 ## Export and upload (end of session)
 

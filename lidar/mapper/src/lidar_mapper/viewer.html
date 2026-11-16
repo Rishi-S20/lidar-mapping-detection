@@ -254,13 +254,12 @@ function onDetections(msg) {
     ? msg.boxes.map(b => `score ${b.score.toFixed(2)}, ${b.height_m.toFixed(1)} m high`).join("; ") : (msg.note ?? "-");
   $("prange").textContent = "-";
 }
-function showPersonRange(pr, hasSonar) {
+function showPersonRange(pr) {
   if (!detHelpers.length) return;
   const el = $("prange");
   if (!pr || pr.state === "no_person") el.textContent = "point the phone at the green box";
-  else if (pr.state === "ambiguous") el.textContent = "ambiguous: something else is in the beam";
-  else el.textContent = `${pr.range_m.toFixed(2)} m (${pr.source})` +
-    (pr.source === "sonar" ? `, LiDAR ${pr.lidar_person_m.toFixed(2)} m` : hasSonar ? ", no sonar echo" : "");
+  else if (pr.state === "ambiguous") el.textContent = "ambiguous: something else is in the way";
+  else el.textContent = `${pr.range_m.toFixed(2)} m`;
 }
 
 function onLabels(msg) {
@@ -313,7 +312,7 @@ function onMessage(buf) {
   st.textContent = hdr.status ?? "-";
   st.className = hdr.status === "tracking" ? "status-tracking" : hdr.status === "lost" ? "status-lost" : "status-other";
   document.getElementById("nvox").textContent = (hdr.voxels ?? 0).toLocaleString();
-  showPersonRange(hdr.person_range, hdr.sonar);
+  showPersonRange(hdr.person_range);
   document.getElementById("valid").textContent = hdr.valid == null ? "-" : Math.round(hdr.valid * 100) + "%";
 }
 
