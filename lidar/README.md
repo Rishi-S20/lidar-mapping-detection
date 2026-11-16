@@ -6,10 +6,10 @@ light**, so mapping uses only LiDAR depth and the IMU (gyro, accelerometer,
 compass). See [ADR-0015](docs/decisions/0015-iphone-lidar-dark-mapping.md).
 
 ```
-iPhone (ios/)                          Mac (mapper/)                         Viewer (repo root)
-LiDAR depth 10 fps + IMU attitude  ->  depth -> 3D points                ->  ws://127.0.0.1:8765/ws
-binary WebSocket (PROTOCOL.md)         IMU rotation + ICP alignment          (existing EchoSense viewer,
-ws://<mac>:8770/depth                  voxel map, record .esd, export .ply    no changes needed)
+iPhone (ios/)                          Mac (mapper/)                         Browser
+LiDAR depth 10 fps + IMU attitude  ->  depth -> 3D points                ->  http://127.0.0.1:8780/
+binary WebSocket (PROTOCOL.md)         IMU rotation + ICP alignment          live map, labelling,
+ws://<mac>:8770/depth                  voxel map, record .esd, export .ply    Find people
 ```
 
 > Status 2026-11-14: **first real phone run done (lights on).** The phone streamed
@@ -54,32 +54,9 @@ use the Mac's Wi-Fi IP.
 
 ### 4. View the map
 
-**Full-density view (recommended):** open `http://127.0.0.1:8780/` while
-`serve` (or `replay --serve` / `sim --serve`) runs. It shows the whole map
-(up to 800k points, coloured by height), the live frame in orange, and the phone's
-path. The EchoSense viewer below is capped at 20,000 points, so it shows a thinned map.
-
-
-```bash
-node serve.js          # from the repo root; open http://127.0.0.1:4173/
-```
-
-In the viewer set **Sensor feed** to **Sonar / Preview**, keep the address
-`ws://127.0.0.1:8765/ws`, and click **Connect**. You see the accumulated map
-plus the current frame.
-
-The viewer recognises these frames (`meta.kind: "lidar_map"`) through
-`src/mapper-adapter.js`: map points are coloured as floor, wall, ceiling or
-object, the live frame is drawn in orange-red, and **Room analysis** draws a
-labelled floor plan with each object's height. A trained surface forest runs
-locally in the viewer, with the geometric classifier as a fallback. The
-trained model has only been evaluated on simulated rooms. Add `--viewer-points 50000` to `serve`,
-`replay --serve` or `sim --serve` to send a denser map (the adapter accepts
-up to 60,000 points; the default stays at 20,000). `scripts/run-lidar.sh
---mapper` from the repo root does all of this in one command.
-
-The team's `websocket-bridge --lidar` also uses port 8765. Run one or the
-other, or give the mapper `--viewer-port 8766` and type that address in.
+Open `http://127.0.0.1:8780/` while `serve` (or `replay --serve` / `sim --serve`) runs. It shows
+the whole map (up to 800k points, coloured by height), the live frame in white, and the phone's
+path. The same page has the labelling panel and the **Find people in this map** button.
 
 ## Collecting labelled data
 

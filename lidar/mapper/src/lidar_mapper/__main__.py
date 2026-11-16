@@ -27,13 +27,6 @@ def _common(p) -> None:
     p.add_argument("--min-conf", type=int, default=1, help="min LiDAR confidence (0 low, 1 med, 2 high)")
     p.add_argument("--pose", choices=["imu_icp", "arkit"], default="imu_icp",
                    help="imu_icp = dark-safe (default); arkit = camera-based reference, lights on only")
-    p.add_argument("--view", choices=["map", "frame", "both"], default="both")
-    p.add_argument("--viewer-port", type=int, default=8765)
-    p.add_argument("--capture-stall-seconds", type=float, default=3.0,
-                   help="historical capture after this many seconds without successful depth ingestion (default 3)")
-    p.add_argument("--viewer-points", type=int, default=20000,
-                   help="points sent to the EchoSense viewer per update (default 20000; the viewer's "
-                        "mapper adapter accepts up to 60000, the plain sonar decoder only 20000)")
     p.add_argument("--ply", help="write the final map to this .ply file")
     p.add_argument("--person-model", default="models/person-v0.joblib",
                    help="person detector for the viewer's Find people button (python -m lidar_mapper.detect train)")
@@ -68,11 +61,6 @@ def main(argv=None) -> None:
                    help="also copy to this Databricks volume folder, e.g. /Volumes/workspace/<schema>/landing/lidar")
     e.add_argument("--profile", help="Databricks CLI profile for --upload")
     a = ap.parse_args(argv)
-    if getattr(a, "viewer_points", 20000) != 20000:
-        # Opt-in: the default stays at the tested 20,000.
-        from . import server as _server
-        _server.MAX_VIEWER_POINTS = max(5000, min(60000, a.viewer_points))
-
     if a.cmd == "export":
         from .export import export_session, upload
         labels = dict(kv.split("=", 1) for kv in a.label)
@@ -87,10 +75,10 @@ def main(argv=None) -> None:
         return
 
     if a.cmd == "serve":
-        live = LiveMapper(_mapper(a), view=a.view, record=a.record, capture_stall_s=a.capture_stall_seconds)
+        live = LiveMapper(_mapper(a), record=a.record)
         _load_detector(live, a.person_model)
         try:
-            asyncio.run(run_server(live, a.port, a.viewer_port))
+            asyncio.run(run_server(live, a.port))
         except KeyboardInterrupt:
             pass
         finally:
@@ -107,12 +95,10 @@ def main(argv=None) -> None:
         else:
             from .sim import stream
             messages = [protocol.encode(fr) for fr in stream(a.frames)]
-        live = LiveMapper(_mapper(a), view=a.view, verbose=False,
-                          delivery="simulated" if a.cmd == "sim" else "recorded",
-                          capture_stall_s=a.capture_stall_seconds)
+        live = LiveMapper(_mapper(a), verbose=False)
         _load_detector(live, a.person_model)
         if a.serve:
-            asyncio.run(_paced(live, messages, a.viewer_port))
+            asyncio.run(_paced(live, messages))
         else:
             t0 = time.time()
             statuses = []
@@ -147,23 +133,15 @@ def _finish(mapper: Mapper, ply: str | None) -> None:
         print(f"wrote {len(pts)} points to {ply}")
 
 
-async def _paced(live: LiveMapper, messages: list[bytes], viewer_port: int, fps: float = 10) -> None:
-    from websockets.asyncio.server import serve
-
-    from .server import VIEWER_ORIGINS
-
-    async def viewer(conn):
-        await live.viewer_handler(conn)
-
+async def _paced(live: LiveMapper, messages: list[bytes], fps: float = 10) -> None:
+    """Replay at a steady rate while serving the viewer, then keep serving the final map."""
     from .server import dense_server
-    async with serve(viewer, "127.0.0.1", viewer_port, origins=VIEWER_ORIGINS + [None], compression=None), \
-            dense_server(live, 8780):
-        print(f"[viewer] ws://127.0.0.1:{viewer_port}/ws   full-density map: http://127.0.0.1:8780/ (Ctrl+C to stop)")
+    async with dense_server(live, 8780):
+        print("[viewer] http://127.0.0.1:8780/ (Ctrl+C to stop)")
         for msg in messages:
             await asyncio.to_thread(live.ingest, msg)
             print(live.status_line(), flush=True)
             await asyncio.sleep(1 / fps)
-        live.finish_capture()
         print("[replay] done; still serving the final map")
         await asyncio.Future()
 
