@@ -1,12 +1,12 @@
 # ADR-0018: Fill the scan checklist with synthetic targets inserted into real empty-room scans
 
-- **Status:** accepted
+- **Status:** superseded. The generator was removed on 2026-11-16: synthetic scans did not improve detection on real scans ([ADR-0019](0019-lidar-person-detector-v0.md)). Kept as a record of what was tried.
 - **Date:** 2026-11-15
 - **Area:** data pipeline (LiDAR)
 
 ## Context
 On 2026-11-15 the team recorded 13 labelled real scans: empty rooms, standing, sitting and lying.
-The [checklist](../../../lidar/DATA_COLLECTION.md) still needs 17 more: crouching, partly covered,
+The [checklist](../../DATA_COLLECTION.md) still needs 17 more: crouching, partly covered,
 pets and mixed clutter, plus extra standing and lying scans. Real pets and staged rubble aren't
 available at the venue. We want a full dataset so the pipeline and the next stage
 (embeddings/classifier) can be built end to end now.

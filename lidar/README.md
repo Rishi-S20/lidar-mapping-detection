@@ -3,7 +3,7 @@
 The project's sensor is now the **iPhone Pro LiDAR** (the ultrasonic sensor
 couldn't be sourced). Requirement from the team: **nothing may depend on visible
 light**, so mapping uses only LiDAR depth and the IMU (gyro, accelerometer,
-compass). See [ADR-0015](../sonar-ml/docs/decisions/0015-iphone-lidar-dark-mapping.md).
+compass). See [ADR-0015](docs/decisions/0015-iphone-lidar-dark-mapping.md).
 
 ```
 iPhone (ios/)                          Mac (mapper/)                         Viewer (repo root)
@@ -85,7 +85,7 @@ other, or give the mapper `--viewer-port 8766` and type that address in.
 
 See **[DATA_COLLECTION.md](DATA_COLLECTION.md)**: what to scan, the per-scan routine
 (**Clear map** → scan → **Label this scan** panel → boxes → **Save labels**), and
-export. Why it works this way: [ADR-0017](../sonar-ml/docs/decisions/0017-scan-labelling.md).
+export. Why it works this way: [ADR-0017](docs/decisions/0017-scan-labelling.md).
 
 ## Send scans to Databricks
 
@@ -105,7 +105,7 @@ Tables in `workspace.dev_<you>_echosense_lidar`:
 - **Gold:** `gold_lidar_session_summary`, `gold_lidar_quality_by_lights`, `gold_lidar_timeline`
 
 Bundle: `lidar/databricks.yml` (deploy from `lidar/`: `databricks bundle deploy`).
-Why: [ADR-0016](../sonar-ml/docs/decisions/0016-lidar-lakehouse.md).
+Why: [ADR-0016](docs/decisions/0016-lidar-lakehouse.md).
 
 ## Without a phone
 
