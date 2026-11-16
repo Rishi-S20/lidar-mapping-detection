@@ -67,33 +67,11 @@ def main(argv=None) -> None:
     e.add_argument("--upload", metavar="VOLUME_DIR",
                    help="also copy to this Databricks volume folder, e.g. /Volumes/workspace/<schema>/landing/lidar")
     e.add_argument("--profile", help="Databricks CLI profile for --upload")
-    y = sub.add_parser("synth", help="synthetic labelled scans: targets inserted into real empty-room scans")
-    y.add_argument("bases", nargs="+", help="real empty-room .esd recordings (with .live.npz sidecars)")
-    y.add_argument("--out", default="recordings/synthetic")
-    y.add_argument("--scene", help="one scene (default: the rest of the DATA_COLLECTION checklist)")
-    y.add_argument("--variant", default="", help="e.g. lying_back, lying_side, lying_curled, dog, cat")
-    y.add_argument("--name", help="output name for --scene")
-    y.add_argument("--seed", type=int, default=0)
-    y.add_argument("--workers", type=int, default=4)
     a = ap.parse_args(argv)
     if getattr(a, "viewer_points", 20000) != 20000:
         # Opt-in: the default stays at the tested 20,000.
         from . import server as _server
         _server.MAX_VIEWER_POINTS = max(5000, min(60000, a.viewer_points))
-
-    if a.cmd == "synth":
-        from .synth import run_plan, synthesize
-        if a.scene:
-            res = [synthesize(a.bases[0], a.scene, a.variant, a.out, a.name or f"synth-{a.scene}", seed=a.seed)]
-        else:
-            res = run_plan(a.bases, a.out, seed=a.seed, workers=a.workers)
-        for r in res:
-            if "error" in r:
-                print(f"{r['name']}: FAILED {r['error']}")
-            else:
-                print(f"{r['name']}: {r['frames']} frames on {r['base']}, target points seen {r['visible_target_points']}, "
-                      f"boxes {[b['label'] for b in r['boxes']]}")
-        return
 
     if a.cmd == "export":
         from .export import export_session, upload
