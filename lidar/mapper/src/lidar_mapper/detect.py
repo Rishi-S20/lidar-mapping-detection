@@ -181,6 +181,48 @@ def detect(grid: Grid, model, threshold: float = 0.5) -> list[dict]:
     return sorted(found, key=lambda d: -d["score"])
 
 
+def person_range(depth: np.ndarray, K: np.ndarray, R: np.ndarray, t: np.ndarray, boxes: list[dict],
+                 half_angle_deg: float = 10.0, min_share: float = 0.15, front_margin: float = 0.15) -> dict:
+    """Distance from the phone to a detected person it is pointing at, from one depth frame.
+
+    `boxes` are detections in world metres; R, t are world <- camera. Only depth pixels within
+    `half_angle_deg` of the camera axis are used.
+
+      no_person   no detection box is in that cone
+      ambiguous   a person is in the cone but fills too little of it, or something is nearer
+      person      the person is the nearest thing in the cone: `range_m` is the distance to them
+    """
+    h, w = depth.shape
+    v, u = np.mgrid[0:h, 0:w]
+    x = (u - K[0, 2]) / K[0, 0]
+    y = (v - K[1, 2]) / K[1, 1]
+    cone = ((np.arccos(1 / np.sqrt(x * x + y * y + 1)) <= np.radians(half_angle_deg))
+            & np.isfinite(depth) & (depth > 0.05))
+    out = {"state": "no_person", "range_m": None, "nearest_m": None, "cone_share": 0.0}
+    if cone.sum() < 20 or not boxes:
+        return out
+    d = depth[cone]
+    cam = np.stack([x[cone] * d, y[cone] * d, d], -1)
+    ranges = np.linalg.norm(cam, axis=1)
+    world = cam @ np.asarray(R).T + np.asarray(t)
+    nearest = float(np.percentile(ranges, 10))
+    out["nearest_m"] = round(nearest, 3)
+    best = None
+    for box in boxes:
+        inside = np.all((world >= np.asarray(box["min"]) - 0.05) & (world <= np.asarray(box["max"]) + 0.05), axis=1)
+        if inside.sum() >= 20 and (best is None or inside.mean() > best[0]):
+            best = (float(inside.mean()), float(np.percentile(ranges[inside], 10)))
+    if best is None:
+        return out
+    share, person_near = best
+    out["cone_share"] = round(share, 2)
+    if share < min_share or person_near > nearest + front_margin:
+        out["state"] = "ambiguous"
+    else:
+        out.update(state="person", range_m=round(person_near, 3))
+    return out
+
+
 def _overlap(det: dict, box: dict) -> float:
     """Share of the detection's footprint that lies inside the labelled box."""
     lo = np.maximum(det["min"][:2], np.asarray(box["min"][:2]))

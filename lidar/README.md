@@ -81,24 +81,6 @@ up to 60,000 points; the default stays at 20,000). `scripts/run-lidar.sh
 The team's `websocket-bridge --lidar` also uses port 8765. Run one or the
 other, or give the mapper `--viewer-port 8766` and type that address in.
 
-## HC-SR04 sonar cross-check (optional)
-
-An HC-SR04 fixed to the phone can be read alongside the LiDAR:
-
-```bash
-.venv/bin/pip install pyserial
-.venv/bin/python -m lidar_mapper serve --sonar-port /dev/cu.usbmodem1101 --sonar-mount 0,-0.04,0
-```
-
-Each depth frame is compared with the latest sonar reading inside the sonar's
-cone. Where the sonar hears something clearly nearer than the LiDAR sees
-(glass, mirrors), the mapper marks a sonar-only surface point and sends it to
-the viewer. Without `--sonar-port` nothing changes. Wiring, mounting, the
-alignment check and the exact rules: [hardware/hcsr04/README.md](../hardware/hcsr04/README.md).
-Code: `mapper/src/lidar_mapper/sonar.py`, tests in `mapper/tests/test_sonar.py`.
-Bench tested with a real HC-SR04 on Windows and synthetic LiDAR input. The
-combined real iPhone and HC-SR04 setup still needs an alignment test.
-
 ## Collecting labelled data
 
 See **[DATA_COLLECTION.md](DATA_COLLECTION.md)**: what to scan, the per-scan routine

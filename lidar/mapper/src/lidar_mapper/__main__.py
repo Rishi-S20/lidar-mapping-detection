@@ -35,19 +35,8 @@ def _common(p) -> None:
                    help="points sent to the EchoSense viewer per update (default 20000; the viewer's "
                         "mapper adapter accepts up to 60000, the plain sonar decoder only 20000)")
     p.add_argument("--ply", help="write the final map to this .ply file")
-    p.add_argument("--sonar-port", help="serial port of the HC-SR04 microcontroller, e.g. /dev/cu.usbmodem1101 "
-                                        "(serve only; needs pyserial). See hardware/hcsr04/README.md")
-    p.add_argument("--sonar-baud", type=int, default=115200)
     p.add_argument("--person-model", default="models/person-v0.joblib",
                    help="person detector for the viewer's Find people button (python -m lidar_mapper.detect train)")
-    p.add_argument("--sonar-cone", type=float, default=10.0, help="sonar beam half angle, degrees")
-    p.add_argument("--sonar-offset-deg", default="0,0", metavar="RIGHT,DOWN",
-                   help="sonar axis relative to the camera axis, degrees")
-    p.add_argument("--sonar-mount", default="0,0,0", metavar="RIGHT,DOWN,FORWARD",
-                   help="sonar position relative to the LiDAR in the camera frame, meters")
-    p.add_argument("--sonar-sim", action="store_true",
-                   help="sim only: SYNTHETIC sonar that agrees with the LiDAR, then reports a nearer surface "
-                        "for a stretch of frames, as a pane of glass would")
 
 
 def main(argv=None) -> None:
@@ -122,13 +111,6 @@ def main(argv=None) -> None:
     if a.cmd == "serve":
         live = LiveMapper(_mapper(a), view=a.view, record=a.record, capture_stall_s=a.capture_stall_seconds)
         _load_detector(live, a.person_model)
-        if a.sonar_port:
-            from .sonar import SerialSonar
-            live.sonar = _sonar(a)
-            if a.record:
-                live.sonar.sidecar = open(a.record + ".sonar.jsonl", "a", encoding="utf-8")
-            SerialSonar(live.sonar, a.sonar_port, a.sonar_baud).start()
-            print(f"[sonar] reading {a.sonar_port} at {a.sonar_baud} baud")
         try:
             asyncio.run(run_server(live, a.port, a.viewer_port))
         except KeyboardInterrupt:
@@ -151,14 +133,6 @@ def main(argv=None) -> None:
                           delivery="simulated" if a.cmd == "sim" else "recorded",
                           capture_stall_s=a.capture_stall_seconds)
         _load_detector(live, a.person_model)
-        sidecar = Path(a.file + ".sonar.jsonl") if a.cmd == "replay" else None
-        if sidecar is not None and sidecar.exists():
-            from .sonar import load_sidecar
-            live.sonar, live.sonar_replay = _sonar(a), load_sidecar(str(sidecar))
-            print(f"[sonar] replaying {len(live.sonar_replay)} recorded readings from {sidecar.name}")
-        elif a.cmd == "sim" and a.sonar_sim:
-            live.sonar, live.sonar_replay = _sonar(a, synthetic=True), _synthetic_sonar(messages, a.sonar_cone)
-            print("[sonar] SYNTHETIC readings. Not from hardware.")
         if a.serve:
             asyncio.run(_paced(live, messages, a.viewer_port))
         else:
@@ -185,31 +159,6 @@ def _load_detector(live, path: str) -> None:
         print(f"[detect] person model {path} loaded")
     except Exception as exc:
         print(f"[detect] could not load {path}: {exc}")
-
-
-def _sonar(a, synthetic: bool = False):
-    from .sonar import SonarFusion
-    right, down = (float(v) for v in a.sonar_offset_deg.split(","))
-    mount = tuple(float(v) for v in a.sonar_mount.split(","))
-    if len(mount) != 3:
-        raise SystemExit("--sonar-mount needs three numbers: RIGHT,DOWN,FORWARD")
-    return SonarFusion(half_angle_deg=a.sonar_cone, offset_deg=(right, down), mount_m=mount, synthetic=synthetic)
-
-
-def _synthetic_sonar(messages: list[bytes], half_angle_deg: float) -> dict:
-    """SYNTHETIC sonar for `sim --sonar-sim`: the nearest LiDAR range in the cone, except for the
-    middle fifth of the run, where it reports 0.8 m as if a pane of glass stood in front."""
-    import numpy as np
-
-    from .sonar import cone_ranges
-    readings = {}
-    n = len(messages)
-    for i, msg in enumerate(messages):
-        f = protocol.decode(msg)
-        ranges, _ = cone_ranges(f.depth, f.K, half_angle_deg)
-        near = float(np.percentile(ranges, 10)) if len(ranges) else None
-        readings[f.seq] = 0.8 if 0.4 * n <= i < 0.6 * n and (near is None or near > 1.3) else near
-    return readings
 
 
 def _finish(mapper: Mapper, ply: str | None) -> None:
