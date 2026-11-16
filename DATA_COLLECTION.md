@@ -6,8 +6,8 @@ viewer right after each scan ([ADR-0017](docs/decisions/0017-scan-labelling.md))
 
 ## Setup (once per session)
 
-1. Mac: `cd lidar/mapper && .venv/bin/python -m lidar_mapper serve --record recordings/<day>-<room>.esd`
-2. Phone: EchoSense app, **LiDAR only**, the Mac address (see `lidar/README.md`; on an
+1. Mac: `cd mapper && .venv/bin/python -m lidar_mapper serve --record recordings/<day>-<room>.esd`
+2. Phone: the capture app, **LiDAR only**, the Mac address (see `README.md`; on an
    IPv6-only hotspot use the Mac's IPv6 address in brackets), **Start streaming**.
 3. Browser: `http://127.0.0.1:8780/`.
 
@@ -43,7 +43,7 @@ the dark test.
 ## Export and upload (end of session)
 
 ```bash
-cd lidar/mapper
+cd mapper
 .venv/bin/python -m lidar_mapper export recordings/<day>-<room>*.esd \
     --upload /Volumes/workspace/dev_<you>_echosense_lidar/landing/lidar
 ```

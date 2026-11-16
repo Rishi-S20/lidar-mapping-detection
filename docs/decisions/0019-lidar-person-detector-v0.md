@@ -11,7 +11,7 @@ ceiling and object only. Labelled scans now exist ([ADR-0017](0017-scan-labellin
 [ADR-0018](0018-synthetic-lidar-scans.md)).
 
 ## Decision
-`lidar/mapper/src/lidar_mapper/detect.py` (`python -m lidar_mapper.detect eval|train|run`):
+`mapper/src/lidar_mapper/detect.py` (`python -m lidar_mapper.detect eval|train|run`):
 
 1. Find the floor; keep map points 7 cm to 2 m above it. Geometry only, so it works in the dark.
 2. Cut the floor plan into 10 cm cells. Each occupied cell gets 30 features: a height profile in

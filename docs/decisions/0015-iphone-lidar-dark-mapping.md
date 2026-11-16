@@ -15,18 +15,18 @@
   (all camera-based, so they degrade or fail in the dark).
 
 ## Decision
-1. **Capture:** our own SwiftUI app (`lidar/ios/`), not Record3D: free, our format,
+1. **Capture:** our own SwiftUI app (`ios/`), not Record3D: free, our format,
    and full access to the sensors. Default source is the **AVFoundation LiDAR
    depth camera** (no world tracking). ARKit scene depth is an optional
    reference mode, and its pose is labelled camera-based.
 2. **Transport:** binary WebSocket, depth as float16 + IMU attitude/gravity per
-   frame, ~10 fps (`lidar/PROTOCOL.md` v0.1). The phone drops frames rather than
+   frame, ~10 fps (`PROTOCOL.md` v0.1). The phone drops frames rather than
    queueing them.
 3. **Pose without light:** orientation from CoreMotion (gravity gives z up; gyro +
    compass give yaw), position from **point-to-plane ICP** of each depth frame
    against the map, seeded by the IMU rotation change and constant velocity.
    Frames that fit badly or disagree with the IMU by > 10° are marked lost and not
-   mapped. Implemented in numpy/scipy (`lidar/mapper/`), no Open3D dependency.
+   mapped. Implemented in numpy/scipy (`mapper/`), no Open3D dependency.
 4. **Map:** 3 cm voxel grid with hit counts; streamed to the existing EchoSense
    viewer through the same JSON envelope the sonar bridge uses (`kind:
    lidar_map`), so the viewer needs no change. Sessions are recorded (`.esd`) for

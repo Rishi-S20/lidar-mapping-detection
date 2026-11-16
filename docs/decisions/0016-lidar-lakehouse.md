@@ -20,7 +20,7 @@ the target. Joining scans across sessions is deprioritized.
    Parquet rather than `.esd` so Spark reads it natively.
 2. **Upload** with `--upload <volume dir>` (Databricks CLI `fs cp`) into a Unity
    Catalog volume. A job with a **file-arrival trigger** on `sessions/` refreshes the pipeline.
-3. **Separate bundle in `lidar/`** (`echosense_lidar`, its own schema), owned by
+3. **Separate bundle (originally in `lidar/`)** (`echosense_lidar`, its own schema), owned by
    the LiDAR work. The sonar bundle stays as history.
 4. **Pure Spark pipeline, no custom wheel.** Poses and maps are computed on
    the Mac, so the cluster needs no `lidar_mapper` install. (The sonar

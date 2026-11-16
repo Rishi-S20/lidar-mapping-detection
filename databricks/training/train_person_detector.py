@@ -8,7 +8,7 @@ builds the same floor-plan features as `lidar_mapper.detect`, then:
   3. Logs parameters, metrics and the model to MLflow, and registers it in Unity Catalog.
   4. Writes the per-scan results to `gold_person_detector_eval`.
 
-Run: databricks bundle run person_detector_training   (from lidar/)
+Run: databricks bundle run person_detector_training   (from the repo root)
 """
 import argparse
 import importlib.util

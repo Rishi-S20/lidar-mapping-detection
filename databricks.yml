@@ -1,4 +1,4 @@
-# Databricks Asset Bundle: EchoSense LiDAR lakehouse (ADR-0016). Deploy from lidar/:
+# Databricks Asset Bundle: LiDAR lakehouse (ADR-0016). Deploy from the repo root:
 #   databricks bundle deploy && databricks bundle run lidar_ingest
 bundle:
   name: echosense_lidar

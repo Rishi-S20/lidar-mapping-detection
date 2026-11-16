@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>EchoSense reads the LiDAR depth sensor to map the room. No camera images are stored or sent.</string>
+	<string>This app reads the LiDAR depth sensor to map the room. No camera images are stored or sent.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>EchoSense streams LiDAR depth to the mapping app on your Mac.</string>
+	<string>This app streams LiDAR depth to the mapping app on your Mac.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

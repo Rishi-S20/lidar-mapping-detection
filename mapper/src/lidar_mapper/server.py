@@ -321,7 +321,7 @@ async def run_server(live: LiveMapper, port: int = 8770, host: str | None = None
     async with serve(phone, host, port, max_size=4 * 1024 * 1024, max_queue=2, compression=None), \
             dense_server(live, map_port):
         # host=None listens on every IPv4 *and* IPv6 address. An iPhone hotspot can be IPv6-only
-        # (the Mac then shows a 192.0.0.x CLAT address the phone can't reach), see lidar/README.md.
+        # (the Mac then shows a 192.0.0.x CLAT address the phone can't reach), see README.md.
         print(f"[server] phone -> ws://<this Mac>:{port}/depth (all IPv4 + IPv6 addresses)")
         print(f"[server] viewer -> http://127.0.0.1:{map_port}/")
         try:

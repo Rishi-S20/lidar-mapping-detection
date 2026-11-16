@@ -12,7 +12,7 @@ available at the venue. We want a full dataset so the pipeline and the next stag
 (embeddings/classifier) can be built end to end now.
 
 ## Decision
-`python -m lidar_mapper synth <empty-room .esd ...>` (`lidar/mapper/src/lidar_mapper/synth.py`)
+`python -m lidar_mapper synth <empty-room .esd ...>` (`mapper/src/lidar_mapper/synth.py`)
 builds each missing scene **on top of a real empty-room recording**:
 
 1. **Real parts, reused.** The base recording supplies:

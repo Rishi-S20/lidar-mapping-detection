@@ -1,4 +1,4 @@
-"""Depth stream v0.1 (see lidar/PROTOCOL.md): parse and build binary frame messages."""
+"""Depth stream v0.1 (see PROTOCOL.md): parse and build binary frame messages."""
 
 from __future__ import annotations
 

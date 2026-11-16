@@ -3,7 +3,7 @@ import CoreVideo
 import Foundation
 import simd
 
-/// One frame of the EchoSense depth stream v0.1 (see lidar/PROTOCOL.md).
+/// One frame of the depth stream v0.1 (see PROTOCOL.md).
 struct DepthPacket {
     var seq: Int
     var t: Double

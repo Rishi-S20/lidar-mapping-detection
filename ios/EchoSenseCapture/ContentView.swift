@@ -51,7 +51,7 @@ struct ContentView: View {
                     if let e = capture.error { Text(e).foregroundStyle(.red).font(.footnote) }
                 }
             }
-            .navigationTitle("EchoSense Capture")
+            .navigationTitle("LiDAR Capture")
         }
         .preferredColorScheme(.dark)
     }

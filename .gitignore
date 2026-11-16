@@ -25,3 +25,15 @@ recordings/
 
 # Local screenshots (they show account details)
 screenshots/
+
+# Mapper outputs
+*.esd
+*.ply
+exports/
+models/
+
+# Xcode build
+ios/build/
+
+# Databricks bundle state
+.databricks/

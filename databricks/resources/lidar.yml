@@ -3,7 +3,7 @@ resources:
     lidar:
       catalog_name: ${var.catalog}
       name: ${var.schema}
-      comment: EchoSense iPhone LiDAR sessions (lidar/databricks, ADR-0016)
+      comment: iPhone LiDAR sessions (databricks, ADR-0016)
 
   volumes:
     lidar_landing:

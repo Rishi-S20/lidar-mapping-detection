@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lidar-mapper"
 version = "0.1.0"
-description = "EchoSense: dark-safe live 3D mapping from iPhone LiDAR depth + IMU (no camera)"
+description = "Dark-safe live 3D mapping from iPhone LiDAR depth + IMU (no camera)"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24", "scipy>=1.10", "websockets>=12", "pyarrow>=14"]
 

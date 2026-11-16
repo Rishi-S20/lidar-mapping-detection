@@ -1,4 +1,4 @@
-"""EchoSense LiDAR lakehouse: Lakeflow Declarative Pipeline (ADR-0016).
+"""LiDAR lakehouse: Lakeflow Declarative Pipeline (ADR-0016).
 
 Input (landing volume, written by `lidar_mapper export --upload`):
   lidar/frames/<session_id>.parquet   one row per depth frame (raw float16 depth, IMU, mapper pose)
@@ -41,7 +41,7 @@ def _autoload(fmt: str, sub: str, **opts):
 # ---------------------------------------------------------------- bronze
 
 @dlt.table(comment="Raw LiDAR frames as exported: float16 depth bytes, intrinsics, IMU, mapper pose. "
-           "Format: lidar/PROTOCOL.md + lidar/mapper/src/lidar_mapper/export.py.")
+           "Format: PROTOCOL.md + mapper/src/lidar_mapper/export.py.")
 def bronze_lidar_frames():
     return (_autoload("parquet", "frames")
             .withColumn("source_file", F.col("_metadata.file_path"))

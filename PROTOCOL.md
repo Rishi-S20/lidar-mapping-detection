@@ -1,4 +1,4 @@
-# EchoSense depth stream v0.1 (iPhone → Mac)
+# Depth stream v0.1 (iPhone → Mac)
 
 The iPhone capture app (`ios/`) sends one **binary WebSocket message per depth
 frame** to the Mac mapper (`mapper/`, default `ws://<mac>:8770/depth`).
