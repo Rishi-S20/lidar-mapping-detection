@@ -114,6 +114,35 @@ def cell_labels(grid: Grid, boxes: list[dict], label: str = "person") -> np.ndar
     return y
 
 
+def snap_box(grid: Grid, x: float, y: float, reach: float = 1.0, search: float = 0.2) -> dict | None:
+    """Box around the object under a click at world (x, y), for one-click labelling.
+
+    Starts at the occupied cell nearest the click (within `search` m) and grows through
+    touching occupied cells, but never into wall cells (top above WALL_H) and never more than
+    `reach` m from the click. So a person touching a wall stops at the wall; a person touching
+    a sofa can pull part of the sofa in (check the box size, or fall back to two corners).
+    """
+    if len(grid.cells) == 0:
+        return None
+    click = np.array([x, y])
+    d = np.linalg.norm(grid.centres() - click, axis=1)
+    wall = grid.top > WALL_H
+    ok = ~wall[grid.cells[:, 0], grid.cells[:, 1]] & (d <= search)
+    if not ok.any():
+        return None
+    seed = grid.cells[np.flatnonzero(ok)[d[ok].argmin()]]
+    ii, jj = np.indices(grid.occupied.shape)
+    near = np.hypot(grid.origin[0] + (ii + 0.5) * CELL - x, grid.origin[1] + (jj + 0.5) * CELL - y) <= reach
+    blobs, _ = ndimage.label(grid.occupied & ~wall & near, structure=np.ones((3, 3)))
+    cells = np.argwhere(blobs == blobs[seed[0], seed[1]])
+    lo = grid.origin + cells.min(0) * CELL
+    hi = grid.origin + (cells.max(0) + 1) * CELL
+    height = float(grid.top[cells[:, 0], cells[:, 1]].max())
+    return {"min": [round(float(lo[0]), 3), round(float(lo[1]), 3), round(grid.floor, 3)],
+            "max": [round(float(hi[0]), 3), round(float(hi[1]), 3), round(grid.floor + height + 0.03, 3)],
+            "cells": len(cells), "height_m": round(height, 2)}
+
+
 @dataclass
 class Scan:
     name: str
