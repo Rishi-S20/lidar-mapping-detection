@@ -3,10 +3,15 @@
 Reads the lakehouse tables (silver_lidar_sessions, silver_lidar_map_points, silver_lidar_annotations),
 builds the same floor-plan features as `lidar_mapper.detect`, then:
 
-  1. Evaluates on REAL scans only, holding each real scan out of training in turn.
-  2. Trains the final model on every labelled scan (real + synthetic).
-  3. Logs parameters, metrics and the model to MLflow, and registers it in Unity Catalog.
+  1. Evaluates by holding out one whole room at a time: train on the other rooms, test on that one.
+     A model scored on a scan of a room it trained on partly scores how well it learned the room.
+  2. Trains the final model on every labelled scan.
+  3. Logs parameters, metrics and the model to MLflow.
   4. Writes the per-scan results to `gold_person_detector_eval`.
+  5. Registers the model in Unity Catalog. If that fails, the job fails (after steps 3 and 4).
+
+Only real scans are used. Old synthetic sessions (ADR-0018, generator removed) may still be in the
+tables, so they are filtered out by `data_origin`.
 
 Run: databricks bundle run person_detector_training   (from the repo root)
 """
@@ -53,8 +58,8 @@ print("MLflow experiment ready")
 
 sessions = (spark.table(f"{ns}.silver_lidar_sessions")
             .where("scene IS NOT NULL AND scene <> ''")       # never labelled: can't be called a negative
-            .select("session_id", "source_file", "scene", "room", "lights", "data_origin",
-                    F.col("labels")["base_scan"].alias("base_scan"))
+            .where("data_origin = 'real'")                    # leftover synthetic sessions stay out
+            .select("session_id", "source_file", "scene", "room", "lights")
             .toPandas())
 boxes = spark.table(f"{ns}.silver_lidar_annotations").where("label = 'person'").toPandas()
 
@@ -69,52 +74,47 @@ for row in sessions.itertuples():
     own = [{"label": "person", "pose": b.pose, "min": [b.x_min, b.y_min, b.z_min], "max": [b.x_max, b.y_max, b.z_max]}
            for b in boxes[boxes.session_id == row.session_id].itertuples()]
     scans.append(D.Scan(Path(row.source_file or row.session_id).stem, grid, D.cell_labels(grid, own), own,
-                        row.data_origin or "real", row.room or "", Path(row.base_scan or "").stem))
+                        "real", row.room or "", ""))
     scans[-1].scene, scans[-1].session_id, scans[-1].lights = row.scene, row.session_id, row.lights
 
-real = [s for s in scans if s.origin == "real"]
-synth = [s for s in scans if s.origin != "real"]
-print(f"{len(real)} real scans ({sum(len(s.boxes) for s in real)} people), "
-      f"{len(synth)} synthetic ({sum(len(s.boxes) for s in synth)} people)")
+rooms = sorted({s.room for s in scans})
+print(f"{len(scans)} scans, {sum(len(s.boxes) for s in scans)} people, {len(rooms)} rooms: {rooms}")
+if "" in rooms:
+    print("note: scans with no room label are held out together as one room")
 
 by_name = {s.name: s for s in scans}
-results = {}
-for label, use_synth in (("real_plus_synthetic", True), ("real_only", False)):
-    rows = D.evaluate(scans, "scan", use_synth, a.threshold)
-    results[label] = (rows, D.summarize(rows))
-    print(label, results[label][1])
+rows = D.evaluate(scans, "room", use_synthetic=False, threshold=a.threshold)
+summary = D.summarize(rows)
+print("hold out one room:", summary)
 
 model = D.fit(scans)
 with mlflow.start_run(run_name="person-detector-v0") as run:
     mlflow.log_params({"cell_m": D.CELL, "features": len(D.FEATURES), "trees": model.n_estimators,
-                       "threshold": a.threshold, "real_scans": len(real), "synthetic_scans": len(synth),
-                       "real_people": sum(len(s.boxes) for s in real),
-                       "evaluation": "each real scan held out in turn; synthetic scans built on it held out too"})
-    for label, (rows, summary) in results.items():
-        mlflow.log_metrics({f"{label}_people_found": summary["found"], f"{label}_people": summary["people"],
-                            f"{label}_recall": summary["found"] / max(summary["people"], 1),
-                            f"{label}_false_alarms": summary["false_alarms"],
-                            f"{label}_scans_with_false_alarm": summary["scans_with_false_alarm"]})
-    for scene in sorted({s.scene for s in real if s.boxes}):
-        rows = [r for r in results["real_plus_synthetic"][0] if by_name[r["scan"]].scene == scene]
-        mlflow.log_metric(f"found_{scene}", sum(r["found"] for r in rows))
-        mlflow.log_metric(f"people_{scene}", sum(r["boxes"] for r in rows))
+                       "threshold": a.threshold, "scans": len(scans), "rooms": len(rooms),
+                       "people": sum(len(s.boxes) for s in scans),
+                       "evaluation": "each room held out in turn"})
+    mlflow.log_metrics({"people_found": summary["found"], "people": summary["people"],
+                        "recall": summary["found"] / max(summary["people"], 1),
+                        "false_alarms": summary["false_alarms"],
+                        "scans_with_false_alarm": summary["scans_with_false_alarm"]})
+    for scene in sorted({s.scene for s in scans if s.boxes}):
+        scene_rows = [r for r in rows if by_name[r["scan"]].scene == scene]
+        mlflow.log_metric(f"found_{scene}", sum(r["found"] for r in scene_rows))
+        mlflow.log_metric(f"people_{scene}", sum(r["boxes"] for r in scene_rows))
     X = scans[0].grid.features[:50]
     info = mlflow.sklearn.log_model(model, "model", signature=infer_signature(X, model.predict_proba(X)[:, 1]),
                                     input_example=X[:2])
-    try:
-        version = mlflow.register_model(info.model_uri, f"{ns}.person_detector")
-        print(f"registered {ns}.person_detector version {version.version}")
-    except Exception as exc:  # the run and metrics are still logged
-        print(f"model not registered: {exc}")
     run_id = run.info.run_id
 
 now = datetime.now(timezone.utc)
-table = [(run_id, now, label, r["scan"], by_name[r["scan"]].session_id, by_name[r["scan"]].scene, r["room"],
+table = [(run_id, now, r["scan"], by_name[r["scan"]].session_id, by_name[r["scan"]].scene, r["room"],
           by_name[r["scan"]].lights, int(r["boxes"]), int(r["found"]), int(r["false_alarms"]))
-         for label, (rows, _) in results.items() for r in rows]
-(spark.createDataFrame(table, "run_id string, evaluated_at timestamp, training_data string, scan string, "
-                              "session_id string, scene string, room string, lights string, people int, "
-                              "found int, false_alarms int")
+         for r in rows]
+(spark.createDataFrame(table, "run_id string, evaluated_at timestamp, scan string, session_id string, "
+                              "scene string, room string, lights string, people int, found int, false_alarms int")
  .write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{ns}.gold_person_detector_eval"))
 print(f"wrote {ns}.gold_person_detector_eval ({len(table)} rows), MLflow run {run_id}")
+
+# Last, and not caught: a registration failure should turn the job red, not hide in the log.
+version = mlflow.register_model(info.model_uri, f"{ns}.person_detector")
+print(f"registered {ns}.person_detector version {version.version}")

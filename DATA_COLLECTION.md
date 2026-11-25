@@ -1,7 +1,7 @@
 # Collecting labelled LiDAR scans
 
-Goal: scans where people, pets and objects are boxed and labelled, so the next
-stage (embeddings → classifier) has training data. Labels are drawn in the live
+Goal: scans where people, pets and objects are boxed and labelled, so the person
+detector has training data. Labels are drawn in the live
 viewer right after each scan ([ADR-0017](docs/decisions/0017-scan-labelling.md)).
 
 ## Setup (once per session)

@@ -98,8 +98,12 @@ Tables in `workspace.dev_<you>_echosense_lidar`:
 
 - **Bronze:** `bronze_lidar_frames`, `bronze_lidar_maps`, `bronze_lidar_sessions`
 - **Silver:** `silver_lidar_frames` (raw depth + pose), `silver_lidar_map_points`
-  (input for embeddings), `silver_lidar_sessions`
-- **Gold:** `gold_lidar_session_summary`, `gold_lidar_quality_by_lights`, `gold_lidar_timeline`
+  (input for the person detector), `silver_lidar_sessions` (newest export per scan),
+  `silver_lidar_annotations` (one row per labelled box)
+- **Gold:** `gold_lidar_session_summary`, `gold_lidar_quality_by_lights`, `gold_lidar_timeline`,
+  `gold_lidar_labeled_points`, `gold_lidar_annotation_summary`
+- **Training** (run by hand: `databricks bundle run person_detector_training`): writes
+  `gold_person_detector_eval` and the `person_detector` model
 
 Bundle: `databricks.yml` (deploy from the repo root: `databricks bundle deploy`).
 Why: [ADR-0016](docs/decisions/0016-lidar-lakehouse.md).
