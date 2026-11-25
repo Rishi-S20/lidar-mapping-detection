@@ -6,8 +6,8 @@ Input (landing volume, written by `lidar_mapper export --upload`):
   lidar/sessions/<session_id>.json    session metadata + labels (e.g. lights=off)
 
 Pure Spark/SQL: no custom Python packages on the cluster. Raw depth stays in
-bronze so sessions can be reprocessed later; the embedding/classification stage
-will read `silver_lidar_map_points` and `silver_lidar_frames`.
+bronze so sessions can be reprocessed later. The person detector's training job
+(databricks/training/) reads the silver sessions, map points and annotations.
 """
 
 import dlt
@@ -89,7 +89,7 @@ def silver_lidar_sessions():
         F.col("j.stats.map_points").alias("map_points"), F.col("j.stats.unmerged_segments").alias("unmerged_segments"),
         F.col("j.stats.floor.floor_tilt_deg").alias("floor_tilt_deg"), F.col("j.stats.extent_m").alias("extent_m"),
         F.col("j.labels")["scene"].alias("scene"), "j.map_source",
-        # 'synthetic' = target inserted into a real empty-room scan (ADR-0018); filter on it for evaluation
+        # 'synthetic' = old ADR-0018 sessions (generator removed); training keeps only 'real'
         F.coalesce(F.col("j.labels")["data_origin"], F.lit("real")).alias("data_origin"),
         F.greatest(F.size("j.annotations"), F.lit(0)).alias("n_annotations"), "j.annotations",
         "ingested_at")
@@ -111,7 +111,7 @@ def silver_lidar_frames():
 
 
 @dlt.table(comment="Map points per session and segment (z up, metres, segment 0.. in its own frame). "
-           "Input for segmentation / embeddings.")
+           "Input for the person detector.")
 @dlt.expect_or_drop("finite_xyz", "NOT (isnan(x) OR isnan(y) OR isnan(z))")
 @dlt.expect_or_drop("seen_twice", "hits >= 2")
 @dlt.expect("plausible_extent", "abs(x) < 50 AND abs(y) < 50 AND abs(z) < 10")
@@ -182,7 +182,8 @@ def silver_lidar_annotations():
         F.col("a.max")[0].alias("x_max"), F.col("a.max")[1].alias("y_max"), F.col("a.max")[2].alias("z_max"))
 
 
-@dlt.table(comment="Map points inside each labelled box: the labelled point sets for embeddings/classification.")
+@dlt.table(comment="Map points inside each labelled box. Used for points_inside in the annotation summary; "
+           "the training job derives its own labels from the boxes.")
 def gold_lidar_labeled_points():
     pts = spark.read.table("silver_lidar_map_points").alias("p")  # noqa: F821
     box = spark.read.table("silver_lidar_annotations").alias("b")  # noqa: F821
