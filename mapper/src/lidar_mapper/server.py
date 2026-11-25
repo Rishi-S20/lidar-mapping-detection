@@ -164,6 +164,9 @@ class LiveMapper:
                 elif cmd.get("cmd") == "labels":
                     saved = await asyncio.to_thread(self.set_labels, cmd.get("scene", {}), cmd.get("boxes", []))
                     await labels_msg(saved)
+                elif cmd.get("cmd") == "snap":
+                    box = await asyncio.to_thread(self.snap, float(cmd.get("x", 0)), float(cmd.get("y", 0)))
+                    await conn.send(json.dumps({"type": "snap", "box": box}))
                 elif cmd.get("cmd") == "find":
                     await conn.send(json.dumps({"type": "detections", **await asyncio.to_thread(self.find_people)}))
 
@@ -246,6 +249,15 @@ class LiveMapper:
         saved = self.save_sidecars()
         print(f"[labels] {len(clean)} boxes, scene {self.labels['scene']} -> {saved}", flush=True)
         return saved
+
+    def snap(self, x: float, y: float) -> dict | None:
+        """One-click labelling: the box around whatever is under (x, y) in the current map."""
+        from .detect import build_grid, snap_box
+        with self.lock:
+            points, _ = self.mapper.map.points(2)
+        if len(points) < 1000:
+            return None
+        return snap_box(build_grid(points), x, y)
 
     def find_people(self) -> dict:
         """Run the person detector on the current map. Geometry only, so it does not depend on light."""

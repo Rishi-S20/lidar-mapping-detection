@@ -75,6 +75,7 @@
   <div class="controls">
     <label>Label <select id="boxLabel"><option>person</option><option>pet</option><option>furniture</option><option>clutter</option><option>door</option><option>other</option></select></label>
     <label>Pose <select id="boxPose"><option value="">-</option><option>standing</option><option>sitting</option><option>lying</option><option>crouching</option><option>partly_covered</option></select></label>
+    <button id="snapBox" class="primary">+ Click an object (box fits its points)</button>
     <button id="addBox">+ Add object box (click 2 corners in top view)</button>
     <div id="drawHint"></div>
   </div>
@@ -215,22 +216,42 @@ function boxFromCorners(a, b) {
            points_inside: zs.length };
 }
 
-$("addBox").onclick = () => {
+function startDrawing(snap) {
   if (!lastMap) return;
   mode = "top"; userMoved = false; fitView(lastMap, "top"); userMoved = true;  // hold the view still while drawing
-  drawing = { first: null }; controls.enabled = false;
-  $("drawHint").textContent = "Click the first corner on the floor plan (Esc to cancel)";
-};
+  drawing = { first: null, snap }; controls.enabled = false;
+  $("drawHint").textContent = snap ? "Click the middle of the object on the floor plan (Esc to cancel)"
+                                   : "Click the first corner on the floor plan (Esc to cancel)";
+}
+$("addBox").onclick = () => startDrawing(false);
+$("snapBox").onclick = () => startDrawing(true);
+function addBox(b) {
+  boxes.push(b); redrawBoxes();
+  $("drawHint").textContent = `Added ${b.label} (${b.points_inside} ${b.snapped ? "cells" : "points"} inside). Remember to Save labels.`;
+  $("saveStatus").textContent = "unsaved changes";
+}
+function onSnap(msg) {
+  // server grew a box from the clicked cell through touching occupied cells (detect.snap_box)
+  if (!msg.box) { $("drawHint").textContent = "Nothing there to fit; click on the object's points or draw 2 corners"; return; }
+  const d = msg.box.max.map((v, k) => (v - msg.box.min[k]).toFixed(2)).join("×");
+  addBox({ label: $("boxLabel").value, pose: $("boxPose").value, min: msg.box.min, max: msg.box.max,
+           points_inside: msg.box.cells, snapped: true });
+  $("drawHint").textContent += ` Size ${d} m: check it didn't pull in furniture.`;
+}
 canvas.addEventListener("pointerdown", ev => {
   if (!drawing) return;
   const p = floorPoint(ev); if (!p) return;
+  if (drawing.snap) {
+    drawing = null; controls.enabled = true;
+    if (!sock || sock.readyState !== 1) { $("drawHint").textContent = "not connected"; return; }
+    sock.send(JSON.stringify({ cmd: "snap", x: p.x, y: p.y }));
+    $("drawHint").textContent = "fitting…"; return;
+  }
   if (!drawing.first) { drawing.first = p; $("drawHint").textContent = "Click the opposite corner"; return; }
   const b = boxFromCorners(drawing.first, p);
   drawing = null; controls.enabled = true;
   if (b.max[0] - b.min[0] < 0.05 || b.max[1] - b.min[1] < 0.05) { $("drawHint").textContent = "Box too small; try again"; return; }
-  boxes.push(b); redrawBoxes();
-  $("drawHint").textContent = `Added ${b.label} (${b.points_inside} points inside). Remember to Save labels.`;
-  $("saveStatus").textContent = "unsaved changes";
+  addBox(b);
 });
 addEventListener("keydown", ev => { if (ev.key === "Escape" && drawing) { drawing = null; controls.enabled = true; $("drawHint").textContent = "Cancelled"; } });
 
@@ -238,7 +259,7 @@ $("saveLabels").onclick = () => {
   if (!sock || sock.readyState !== 1) { $("saveStatus").textContent = "not connected"; return; }
   const scn = { lights: $("lights").value, room: $("room").value, scene: $("sceneType").value, notes: $("notes").value };
   Object.keys(scn).forEach(k => { if (!scn[k]) delete scn[k]; });
-  sock.send(JSON.stringify({ cmd: "labels", scene: scn, boxes: boxes.map(({ points_inside, ...b }) => b) }));
+  sock.send(JSON.stringify({ cmd: "labels", scene: scn, boxes: boxes.map(({ points_inside, snapped, ...b }) => b) }));
   $("saveStatus").textContent = "saving…";
 };
 
@@ -264,6 +285,7 @@ function showPersonRange(pr) {
 
 function onLabels(msg) {
   if (msg.type === "detections") return onDetections(msg);
+  if (msg.type === "snap") return onSnap(msg);
   $("scanName").textContent = msg.scan ?? "-";
   const sc = msg.scene || {};
   $("lights").value = sc.lights ?? ""; $("room").value = sc.room ?? ""; $("sceneType").value = sc.scene ?? ""; $("notes").value = sc.notes ?? "";
