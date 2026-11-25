@@ -11,7 +11,7 @@ will read `silver_lidar_map_points` and `silver_lidar_frames`.
 """
 
 import dlt
-from pyspark.sql import functions as F
+from pyspark.sql import Window, functions as F
 
 LANDING = spark.conf.get("lidar.landing_path")  # noqa: F821 (provided by the pipeline runtime)
 
@@ -55,21 +55,29 @@ def bronze_lidar_maps():
             .withColumn("ingested_at", F.current_timestamp()))
 
 
-@dlt.table(comment="Raw session manifests (one JSON file per session).")
+@dlt.table(comment="Raw session manifests (one JSON file per session). A re-export adds a new row.")
 def bronze_lidar_sessions():
-    return (_autoload("text", "sessions", wholeText="true")  # camelCase: "wholetext" is silently ignored
+    # allowOverwrites: a re-exported manifest (e.g. fixed labels) has the same file name. Without this,
+    # Auto Loader skips it as already ingested and the fix never reaches silver.
+    return (_autoload("text", "sessions", wholeText="true",  # camelCase: "wholetext" is silently ignored
+                      **{"cloudFiles.allowOverwrites": "true"})
             .withColumn("source_file", F.col("_metadata.file_path"))
             .withColumn("ingested_at", F.current_timestamp()))
 
 
 # ---------------------------------------------------------------- silver
 
-@dlt.table(comment="Session metadata, flattened. `lights` comes from the export label (on/off/unknown).")
+@dlt.table(comment="Session metadata, flattened, latest export per session only. "
+           "`lights` comes from the export label (on/off/unknown).")
 @dlt.expect_or_drop("has_session_id", "session_id IS NOT NULL")
 @dlt.expect("known_export_version", "export_version LIKE '0.%'")
 def silver_lidar_sessions():
-    s = spark.readStream.table("bronze_lidar_sessions").select(  # noqa: F821
+    # A materialized view, not a stream: bronze can hold several exports of one session, and only the
+    # newest one should count. Session manifests are small, so recomputing this on refresh is cheap.
+    s = spark.read.table("bronze_lidar_sessions").select(  # noqa: F821
         F.from_json("value", SESSION_SCHEMA).alias("j"), "source_file", "ingested_at")
+    newest_first = Window.partitionBy("j.session_id").orderBy(F.col("j.exported_at").desc(), F.col("ingested_at").desc())
+    s = s.withColumn("_rank", F.row_number().over(newest_first)).where("_rank = 1").drop("_rank")
     return s.select(
         "j.session_id", "j.export_version", "j.source_file", F.to_timestamp("j.recorded_at").alias("recorded_at"),
         "j.labels", F.coalesce(F.col("j.labels")["lights"], F.lit("unknown")).alias("lights"),
@@ -164,7 +172,7 @@ def gold_lidar_timeline():
 @dlt.expect_or_drop("box_has_extent", "x_max > x_min AND y_max > y_min AND z_max > z_min")
 @dlt.expect("known_label", "label IN ('person', 'pet', 'furniture', 'clutter', 'door', 'other')")
 def silver_lidar_annotations():
-    s = spark.readStream.table("silver_lidar_sessions").where("n_annotations > 0")  # noqa: F821
+    s = spark.read.table("silver_lidar_sessions").where("n_annotations > 0")  # noqa: F821
     b = s.select("session_id", "lights", "room", "scene", "data_origin",
                  F.posexplode("annotations").alias("box_id", "a"))
     return b.select(
